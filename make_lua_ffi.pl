@@ -65,9 +65,6 @@ sub replace_keywords {
 	return $line;
 }
 
-my %contents;
-my %deps;
-
 sub preprocess {
 	my ($what) = @_;
 	my (undef, $filename) = tempfile("/tmp/ffi.h.XXXXXX", OPEN => 0);
@@ -87,42 +84,25 @@ sub preprocess {
 	return $filename;
 }
 
-sub generate_file_output {
-	my ($file) = @_;
-	my $output = "";
-	foreach my $dep (@{$deps{$file}}) {
-		$output .= generate_file_output($dep);
-	}
-	return $output if !$contents{$file};
-       	$output .= "\n";
-	$output .= "if not FFI_INCLUDED[\"$file\"] then\n";
-	$output .= "\tFFI_INCLUDED[\"$file\"] = true\n";
-	$output .= "\tffi.cdef[[\n";
-	$output .= $contents{$file};
-	$output .= "\t]]\n";
-	$output .= "end\n";
+sub wrap_declarations {
+	my ($file, $decls) = @_;
+	my $output = "if not FFI_INCLUDED[\"$file\"] then\nffi.cdef[[\n";
+	$output .= $decls;
+	$output .= "\n]]\nend\n";
+	return $output;
 }
 
 sub process_file {
 	my ($file) = (@_);
-	my $do_output = 0;
+	my $output = "";
 	my $header = "";
-	my $filtered_output = "";
 	my $footer = "";
-	my $is_terminal = 0;
 
 	my $pp_file = preprocess($file);
 	$header .= "local ffi = require(\"ffi\")\n";
 	$header .= "if nil == FFI_INCLUDED then\n";
 	$header .= "\tFFI_INCLUDED = {}\n";
 	$header .= "end\n";
-
-	my %includes;
-	my @includes;
-
-	if ($no_filter) {
-		$do_output = 1;
-	}
 
 	my $src_basename = basename($file, '.h');
 	my $dest_filename = "$out_dir/$src_basename\_h.lua";
@@ -132,6 +112,7 @@ sub process_file {
 	my %visited;
 	my $current;
 	my $top;
+	my $current_decls = "";
 	while (my $line = <SRC_FILE>) {
 		next if $line =~ /^\s*$/;
 		if ($line =~ /^# \d+ "([^"]+)"/) {
@@ -141,26 +122,34 @@ sub process_file {
 				$visited{$file} = 1;
 				$top = $file;
 			} else {
-				if (!$visited{$file}) {
-					$deps{$current} = [] if !$deps{$current};
-					push(@{$deps{$current}}, $file);
-					$visited{$file} = 1;
+				next if $file eq $current;
+				$visited{$file} = 1;
+				if ($current_decls) {
+					$output .= wrap_declarations($current,
+						$current_decls);
+					$current_decls = "";
 				}
 				$current = $file;
 			}
 		} else {
-			$line = replace_keywords(\$filtered_output, $line);
-			$contents{$current} = "" if !$contents{$current};
-			$contents{$current} .= $line;
+			$line = replace_keywords(\$current_decls, $line);
+			$current_decls .= $line;
 		}
+	}
+	if ($current_decls) {
+		$output .= wrap_declarations($current, $current_decls);
+		$current_decls = "";
 	}
 	close SRC_FILE;
 	unlink($pp_file);
 
+	foreach my $file (keys %visited) {
+		$output .= "FFI_INCLUDED[\"$file\"] = true\n";
+	}
 	$footer .= "";
 
 	print OUT_FILE $header;
-	print OUT_FILE generate_file_output($top);
+	print OUT_FILE $output;
 	print OUT_FILE $footer;
 	close(OUT_FILE);
 }
