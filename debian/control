@@ -1,0 +1,16 @@
+Source: lua-ffi-generator
+Priority: extra
+Maintainer: Konstantin Olkhovskiy <lupus@oxnull.net>
+Build-Depends: debhelper (>= 8.0.0), make
+Standards-Version: 3.9.2
+Section: libs
+Homepage: https://github.com/Lupus/lua-ffi-generator
+Vcs-Browser: https://github.com/Lupus/lua-ffi-generator
+
+Package: lua-ffi-generator
+Section: libdevel
+Architecture: all
+Depends: perl
+Description: FFI cdef generator
+ FFI cdef generator, that takes care of preprocessing header files and couping
+ with multiple definitions problem.
