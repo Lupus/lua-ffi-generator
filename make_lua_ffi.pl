@@ -11,13 +11,17 @@ my $cc = "gcc";
 my $cflags = "";
 my $out_dir = ".";
 my $no_filter = 0;
+my $path_substs = "";
 
 my $result = GetOptions(
 	"cc=s"       => \$cc,
 	"cflags=s"   => \$cflags,
 	"out_dir=s"  => \$out_dir,
 	"no_filter"  => \$no_filter,
+	"path_substs=s"  => \$path_substs,
 );
+
+$path_substs = [map {[split(/=/,$_)]} split(/,/, $path_substs)];
 
 if (!$result) {
 	die "Failed to parse command line\n";
@@ -84,8 +88,18 @@ sub preprocess {
 	return $filename;
 }
 
+sub apply_path_substs {
+	my ($file) = @_;
+	foreach my $subst (@$path_substs) {
+		my ($s, $r) = @$subst;
+		$file =~ s/^$s/$r/e;
+	}
+	return $file;
+}
+
 sub wrap_declarations {
 	my ($file, $decls) = @_;
+	$file = apply_path_substs($file);
 	my $output = "if not FFI_INCLUDED[\"$file\"] then\nffi.cdef[[\n";
 	$output .= $decls;
 	$output .= "\n]]\nend\n";
@@ -144,7 +158,8 @@ sub process_file {
 	unlink($pp_file);
 
 	foreach my $file (keys %visited) {
-		$output .= "FFI_INCLUDED[\"$file\"] = true\n";
+		$output .= "FFI_INCLUDED[\"" . apply_path_substs($file)
+				. "\"] = true\n";
 	}
 	$footer .= "";
 
